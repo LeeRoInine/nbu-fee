@@ -22,7 +22,7 @@ from bs4 import BeautifulSoup
 BASE = "https://bank.gov.ua"
 KYIV = ZoneInfo("Europe/Kyiv")
 ROOT = Path(__file__).resolve().parent
-OWNER, REPO = "LeeRoInine", "nbu-feed"
+OWNER, REPO = "LeeRoInine", "nbu-fee"
 RAW = f"https://raw.githubusercontent.com/{OWNER}/{REPO}/main/docs"
 UA = f"Mozilla/5.0 (compatible; nbu-feed/1.0; +https://github.com/{OWNER}/{REPO})"
 
