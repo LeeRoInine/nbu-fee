@@ -35,6 +35,16 @@ FEEDS = {
     "en": {"file": "feed-en.xml", "title": "NBU — News", "desc": "News of the National Bank of Ukraine (bank.gov.ua)"},
 }
 
+# Research events (https://bank.gov.ua/ua/research/events?category=N): the page lists them itself.
+EVENT_FEEDS = {
+    "seminars": {"category": 3, "file": "feed-seminars.xml", "title": "НБУ — Відкриті дослідницькі семінари",
+                 "desc": "Відкриті дослідницькі семінари НБУ (bank.gov.ua/ua/research/events?category=3)"},
+    "workshops": {"category": 5, "file": "feed-workshops.xml", "title": "НБУ — Практичні воркшопи",
+                  "desc": "Практичні воркшопи НБУ (bank.gov.ua/ua/research/events?category=5)"},
+}
+EVENT_PAGES = 2        # list pages read per category each run (5 events a page)
+EVENT_REREAD_DAYS = 14 # an event page is read again (materials, video) until this long after the event
+
 UA_MONTHS = ["січня", "лютого", "березня", "квітня", "травня", "червня",
              "липня", "серпня", "вересня", "жовтня", "листопада", "грудня"]
 UA_MONTH_NAMES = ["січень", "лютий", "березень", "квітень", "травень", "червень",
@@ -151,17 +161,20 @@ def rfc822(iso):
     return format_datetime(dt.datetime.fromisoformat(iso))
 
 
-def write_feed(lang, items):
-    cfg = FEEDS[lang]
-    newest = next((i["published"] or i["first_seen"] for i in items), None)
+def utcnow():
+    return dt.datetime.now(dt.timezone.utc).replace(microsecond=0)
+
+
+def write_feed(cfg, items, page_link, language):
+    newest = next((i["pub"] for i in items), None)
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
         '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">',
         "<channel>",
         f"<title>{escape(cfg['title'])}</title>",
-        f"<link>{BASE}/{lang}/news/all</link>",
+        f"<link>{escape(page_link)}</link>",
         f"<description>{escape(cfg['desc'])}</description>",
-        f"<language>{'uk' if lang == 'ua' else 'en'}</language>",
+        f"<language>{language}</language>",
         f'<atom:link href="{RAW}/{cfg["file"]}" rel="self" type="application/rss+xml"/>',
     ]
     if newest:
@@ -171,10 +184,10 @@ def write_feed(lang, items):
         body = body.replace("]]>", "]]&gt;")
         lines += [
             "<item>",
-            f"<title>{escape(it['title'])}</title>",
+            f"<title>{escape(it['feed_title'])}</title>",
             f"<link>{escape(it['link'])}</link>",
             f'<guid isPermaLink="true">{escape(it["link"])}</guid>',
-            f"<pubDate>{rfc822(it['published'] or it['first_seen'])}</pubDate>",
+            f"<pubDate>{rfc822(it['pub'])}</pubDate>",
             f"<description><![CDATA[{body}]]></description>",
             "</item>",
         ]
@@ -182,15 +195,27 @@ def write_feed(lang, items):
     (ROOT / "docs" / cfg["file"]).write_text("\n".join(lines), encoding="utf-8")
 
 
-def update(lang):
-    cache_file = ROOT / "data" / f"cache-{lang}.json"
-    cache = json.loads(cache_file.read_text(encoding="utf-8")) if cache_file.exists() else {}
+def load_cache(name):
+    f = ROOT / "data" / f"cache-{name}.json"
+    return f, (json.loads(f.read_text(encoding="utf-8")) if f.exists() else {})
+
+
+def save_cache(f, items):
+    keep = {"link", "pub", "feed_title"}
+    cache = {i["link"]: {k: v for k, v in i.items() if k not in keep} for i in items}
+    f.write_text(json.dumps(cache, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+# ---------------------------------------------------------------- news
+def update_news(lang):
+    cfg = FEEDS[lang]
+    cache_file, cache = load_cache(lang)
     listing = http(f"{BASE}/{lang}/component/source/news/all",
                    data={"page": "1", "perPage": str(PER_PAGE)}, referer=f"{BASE}/{lang}/news/all")
     found = parse_list(listing)
     if not found:
         raise RuntimeError(f"{lang}: the list answered but held no items (page layout changed?)")
-    now = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat()
+    now = utcnow().isoformat()
     for f in found:
         c = cache.setdefault(f["link"], {"first_seen": now})
         c.update({k: v for k, v in f.items() if v is not None})
@@ -204,26 +229,106 @@ def update(lang):
             c["content"] = article_html(http(f["link"]))
         except Exception as e:  # noqa: BLE001 - keep the title-only item, try again next run
             print(f"warning: {f['link']}: {e}", file=sys.stderr)
-    items = sorted(({"link": k, **v} for k, v in cache.items()),
-                   key=lambda i: i.get("published") or i["first_seen"], reverse=True)[:KEEP]
-    cache = {i["link"]: {k: v for k, v in i.items() if k != "link"} for i in items}
-    cache_file.write_text(json.dumps(cache, ensure_ascii=False, indent=1), encoding="utf-8")
-    write_feed(lang, items)
-    print(f"{lang}: {len(found)} listed, {reads} articles read, {len(items)} in feed")
+    items = [{"link": k, **v, "pub": v.get("published") or v["first_seen"], "feed_title": v["title"]}
+             for k, v in cache.items()]
+    items = sorted(items, key=lambda i: i["pub"], reverse=True)[:KEEP]
+    save_cache(cache_file, items)
+    write_feed(cfg, items, f"{BASE}/{lang}/news/all", "uk" if lang == "ua" else "en")
+    print(f"news {lang}: {len(found)} listed, {reads} articles read, {len(items)} in feed")
+
+
+# ---------------------------------------------------------------- research events
+def parse_events(html):
+    soup = BeautifulSoup(html, "html.parser")
+    out = []
+    for box in soup.select(".search-result"):
+        a = box.select_one("a.title[href]") or box.select_one("a[href]")
+        if not a:
+            continue
+        cat = a.select_one(".category")
+        category = cat.get_text(" ", strip=True) if cat else ""
+        if cat:
+            cat.extract()
+        title = a.get_text(" ", strip=True)
+        mark = box.select_one(".mark")
+        date_text = mark.get_text(" ", strip=True) if mark else ""
+        when = parse_date(date_text)
+        if title:
+            out.append({"link": urllib.parse.urljoin(BASE, a["href"]), "title": title, "category": category,
+                        "date_text": date_text, "event_at": when.isoformat() if when else None})
+    return out
+
+
+def event_html(page_html):
+    soup = BeautifulSoup(page_html, "html.parser")
+    body = soup.select_one("main .widget-content") or soup.select_one("main")
+    if not body:
+        return ""
+    for bad in body.select("script, style, noscript, iframe, form"):
+        bad.decompose()
+    for tag in body.find_all(href=True):
+        tag["href"] = urllib.parse.urljoin(BASE, tag["href"])
+    for tag in body.find_all(src=True):
+        tag["src"] = urllib.parse.urljoin(BASE, tag["src"])
+    return str(body)
+
+
+def update_events(name):
+    cfg = EVENT_FEEDS[name]
+    page_link = f"{BASE}/ua/research/events?category={cfg['category']}"
+    cache_file, cache = load_cache(name)
+    found = []
+    for page in range(1, EVENT_PAGES + 1):
+        url = page_link + (f"&page={page}" if page > 1 else "")
+        found += parse_events(http(url))
+    if not found:
+        raise RuntimeError(f"{name}: the events page held no events (page layout changed?)")
+    now = utcnow()
+    for f in found:
+        c = cache.setdefault(f["link"], {"first_seen": now.isoformat()})
+        c.update({k: v for k, v in f.items() if v is not None})
+    reads = 0
+    for link, c in cache.items():
+        if reads >= 8:
+            break
+        event_at = dt.datetime.fromisoformat(c["event_at"]) if c.get("event_at") else None
+        last = dt.datetime.fromisoformat(c["last_read"]) if c.get("last_read") else None
+        fresh = event_at is None or event_at > now - dt.timedelta(days=EVENT_REREAD_DAYS)
+        due = last is None or (fresh and now - last > dt.timedelta(hours=6))
+        if not due:
+            continue
+        reads += 1
+        try:
+            c["content"] = event_html(http(link))
+            c["last_read"] = now.isoformat()
+        except Exception as e:  # noqa: BLE001
+            print(f"warning: {link}: {e}", file=sys.stderr)
+    items = []
+    for k, v in cache.items():
+        # Dated by its announcement: the event's date for past events, when first seen for upcoming ones.
+        pub = min(filter(None, [v.get("event_at"), v["first_seen"]]))
+        title = f"{v['title']} ({v['date_text']})" if v.get("date_text") else v["title"]
+        items.append({"link": k, **v, "pub": pub, "feed_title": title})
+    items = sorted(items, key=lambda i: i["pub"], reverse=True)[:KEEP]
+    save_cache(cache_file, items)
+    write_feed(cfg, items, page_link, "uk")
+    print(f"events {name}: {len(found)} listed, {reads} pages read, {len(items)} in feed")
 
 
 def main():
     (ROOT / "docs").mkdir(exist_ok=True)
     (ROOT / "data").mkdir(exist_ok=True)
+    jobs = [(f"news {lang}", update_news, lang) for lang in FEEDS] + \
+           [(f"events {name}", update_events, name) for name in EVENT_FEEDS]
     failed = []
-    for lang in FEEDS:
+    for label, fn, arg in jobs:
         try:
-            update(lang)
+            fn(arg)
         except Exception as e:  # noqa: BLE001
-            failed.append(lang)
-            print(f"error: {e}", file=sys.stderr)
-    # The Ukrainian feed is the main one: fail the run (GitHub emails you) if it could not be built.
-    if "ua" in failed:
+            failed.append(label)
+            print(f"error ({label}): {e}", file=sys.stderr)
+    # Fail the run (GitHub emails you) if any feed could not be built; the others are still written.
+    if failed:
         sys.exit(1)
 
 
