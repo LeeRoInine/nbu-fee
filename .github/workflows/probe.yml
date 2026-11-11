@@ -11,25 +11,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Fetch pages and candidate list endpoints
+      - name: Fetch event pages
         run: |
           UA="Mozilla/5.0 (compatible; nbu-feed/1.0; +https://github.com/LeeRoInine/nbu-fee)"
-          B=https://bank.gov.ua
           mkdir probe && cd probe
-          for c in 3 5; do curl -sSL -A "$UA" "$B/ua/research/events?category=$c" -o events-$c.html -w "GET events?category=$c -> %{http_code} %{size_download}\n"; done
-          curl -sSL -A "$UA" "$B/en/research/events" -o events-en.html -w "GET en events -> %{http_code} %{size_download}\n"
-          echo "--- component paths in pages:"; grep -ohE 'component/[A-Za-z0-9_/.-]+' *.html | sort | uniq -c
-          echo "--- scripts:"; grep -oE 'src="[^"]+\.js[^"]*"' events-3.html | sed 's/src="//;s/"$//' | sort -u | tee scripts.txt
-          i=0; while read -r s; do i=$((i+1)); case "$s" in http*) u="$s";; *) u="$B$s";; esac; curl -sSL -A "$UA" "$u" -o js-$i.js; done < scripts.txt
-          echo "--- component paths in scripts:"; grep -ohE 'component/[A-Za-z0-9_/.-]+' js-*.js | sort | uniq -c | head -50
-          for p in research/events research/events/all events research; do
-            for c in 3 5; do
-              f="post-$(echo $p | tr / _)-$c.html"
-              curl -sS -A "$UA" -X POST -H "X-Requested-With: XMLHttpRequest" -H "Referer: $B/ua/research/events?category=$c" \
-                -d "page=1&perPage=10&category=$c" "$B/ua/component/source/$p" -o "$f" -w "POST $p category=$c -> %{http_code} %{size_download}\n"
-            done
-          done
-          echo "--- collection-item counts:"; grep -c 'collection-item' *.html || true
+          for id in 336 328; do curl -sSL -A "$UA" "https://bank.gov.ua/ua/research/events/$id" -o event-$id.html -w "event $id -> %{http_code} %{size_download}\n"; done
+          curl -sSL -A "$UA" "https://bank.gov.ua/ua/research/events?category=3&page=2" -o events-3-p2.html -w "page2 -> %{http_code}\n"
       - name: Save probe files to the 'probe' branch
         run: |
           cd probe
