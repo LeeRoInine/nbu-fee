@@ -1,4 +1,6 @@
 name: Probe NBU events pages (temporary)
+permissions:
+  contents: write
 on:
   workflow_dispatch:
   push:
@@ -28,7 +30,9 @@ jobs:
             done
           done
           echo "--- collection-item counts:"; grep -c 'collection-item' *.html || true
-      - uses: actions/upload-artifact@v4
-        with:
-          name: probe
-          path: probe/
+      - name: Save probe files to the 'probe' branch
+        run: |
+          cd probe
+          git init -q -b probe && git add -A
+          git -c user.name=probe -c user.email=probe@users.noreply.github.com commit -q -m probe
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" probe
