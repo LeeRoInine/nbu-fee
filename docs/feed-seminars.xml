@@ -6,7 +6,39 @@
 <description>Відкриті дослідницькі семінари НБУ (bank.gov.ua/ua/research/events?category=3)</description>
 <language>uk</language>
 <atom:link href="https://raw.githubusercontent.com/LeeRoInine/nbu-fee/main/docs/feed-seminars.xml" rel="self" type="application/rss+xml"/>
-<lastBuildDate>Thu, 15 Oct 2026 13:00:00 +0000</lastBuildDate>
+<lastBuildDate>Thu, 12 Nov 2026 14:00:00 +0000</lastBuildDate>
+<item>
+<title>Як змінилася комунікація НБУ під час повномасштабної війни: погляд ШІ (Богдан Чепига) (12 лист. 2026 16:00)</title>
+<link>https://bank.gov.ua/ua/research/events/338</link>
+<guid isPermaLink="true">https://bank.gov.ua/ua/research/events/338</guid>
+<pubDate>Thu, 12 Nov 2026 14:00:00 +0000</pubDate>
+<description><![CDATA[<div class="widget-content">
+<div class="box">
+<div><p class="mark"><i class="fa fa-clock-o"></i> Початок заходу: 12.11.2026 16:00</p></div><p class="mark"><i class="fa fa-clock-o"></i> Кінець заходу: 12.11.2026 17:00</p><p class="category">Відкритий дослідницький семінар</p>
+<div><p>12 листопада 2026 року о 16:00 Національний банк України провів відкритий дослідницький семінар, під час якого Богдан Чепига (Національний банк України, Карпатський національний університет імені Василя Стефаника) презентував дослідження “Як змінилася комунікація НБУ під час повномасштабної війни: погляд ШІ”.</p>
+<p>З матеріалами семінару можна ознайомитися за посиланнями нижче.</p></div>
+<div class="row"> <div class="col-md-6">
+              Матеріали<ul>
+<li>
+<a href="https://bank.gov.ua/ua/researcher/70">Про автора</a>
+</li>
+</ul><ul>
+<li>
+<a href="https://youtu.be/AsRTWIpB1Zw">Відео</a>
+</li>
+</ul><ul>
+<li>
+<a href="https://doi.org/10.26531/vnbu2026.wp03">Робочі матеріали</a>
+</li>
+</ul><ul>
+<li>
+<a href="https://bank.gov.ua/ua/news/all/yak-zminilasya-komunikatsiya-nbu-pid-chas-povnomasshtabnoyi-viyni-poglyad-shi-bogdan-chepiga-eng">Презентація</a>
+</li>
+</ul></div>
+</div>
+</div>
+</div>]]></description>
+</item>
 <item>
 <title>Центральний банк у вогні: монетарна політика та безпековий шок в Україні в умовах війни (Максим Солодаренко) (15 жовт. 2026 16:00)</title>
 <link>https://bank.gov.ua/ua/research/events/336</link>
